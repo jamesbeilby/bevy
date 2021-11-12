@@ -9,7 +9,10 @@ pub struct Time {
     delta_seconds_f64: f64,
     delta_seconds: f32,
     seconds_since_startup: f64,
+    duration_since_startup: Duration,
     startup: Instant,
+    time_scale: f64,
+    last_update_unscaled: Option<Instant>,
 }
 
 impl Default for Time {
@@ -20,7 +23,10 @@ impl Default for Time {
             startup: Instant::now(),
             delta_seconds_f64: 0.0,
             seconds_since_startup: 0.0,
+            duration_since_startup: Duration::from_secs(0),
             delta_seconds: 0.0,
+            time_scale: 1.0,
+            last_update_unscaled: None,
         }
     }
 }
@@ -31,16 +37,27 @@ impl Time {
         self.update_with_instant(now);
     }
 
-    pub(crate) fn update_with_instant(&mut self, instant: Instant) {
-        if let Some(last_update) = self.last_update {
-            self.delta = instant - last_update;
+    pub(crate) fn update_with_instant(&mut self, instant_unscaled: Instant) {
+        let instant = if let (Some(last_update_unscaled), Some(last_update)) =
+            (self.last_update_unscaled, self.last_update)
+        {
+            self.delta = if self.time_scale == 1.0 {
+                instant_unscaled - last_update_unscaled
+            } else {
+                (instant_unscaled - last_update_unscaled).mul_f64(self.time_scale)
+            };
             self.delta_seconds_f64 = self.delta.as_secs_f64();
             self.delta_seconds = self.delta.as_secs_f32();
-        }
+            last_update + self.delta
+        } else {
+            instant_unscaled
+        };
 
-        let duration_since_startup = instant - self.startup;
-        self.seconds_since_startup = duration_since_startup.as_secs_f64();
+        self.duration_since_startup = instant - self.startup;
+        self.seconds_since_startup = self.duration_since_startup.as_secs_f64();
+
         self.last_update = Some(instant);
+        self.last_update_unscaled = Some(instant_unscaled);
     }
 
     /// The delta between the current tick and last tick as a [`Duration`]
@@ -80,7 +97,19 @@ impl Time {
     }
 
     pub fn time_since_startup(&self) -> Duration {
-        Instant::now() - self.startup
+        self.duration_since_startup
+    }
+
+    pub fn time_scale(&self) -> f64 {
+        self.time_scale
+    }
+
+    pub fn set_time_scale(&mut self, time_scale: f64) {
+        if time_scale >= 0.0 {
+            self.time_scale = time_scale;
+        } else {
+            panic!("time_scale must be >= 0.0");
+        }
     }
 }
 
