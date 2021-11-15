@@ -6,13 +6,13 @@ use bevy_utils::{Duration, Instant};
 pub struct Time {
     delta: Duration,
     last_update: Option<Instant>,
+    last_update_unscaled: Option<Instant>,
     delta_seconds_f64: f64,
     delta_seconds: f32,
     seconds_since_startup: f64,
     duration_since_startup: Duration,
     startup: Instant,
     time_scale: f64,
-    last_update_unscaled: Option<Instant>,
 }
 
 impl Default for Time {
@@ -20,13 +20,13 @@ impl Default for Time {
         Time {
             delta: Duration::from_secs(0),
             last_update: None,
+            last_update_unscaled: None,
             startup: Instant::now(),
             delta_seconds_f64: 0.0,
             seconds_since_startup: 0.0,
             duration_since_startup: Duration::from_secs(0),
             delta_seconds: 0.0,
             time_scale: 1.0,
-            last_update_unscaled: None,
         }
     }
 }
@@ -41,17 +41,18 @@ impl Time {
         let instant = if let (Some(last_update_unscaled), Some(last_update)) =
             (self.last_update_unscaled, self.last_update)
         {
-            self.delta = if self.time_scale == 1.0 {
-                instant_unscaled - last_update_unscaled
+            if self.time_scale == 1.0 {
+                self.delta = instant_unscaled - last_update_unscaled;
+                instant_unscaled
             } else {
-                (instant_unscaled - last_update_unscaled).mul_f64(self.time_scale)
-            };
-            self.delta_seconds_f64 = self.delta.as_secs_f64();
-            self.delta_seconds = self.delta.as_secs_f32();
-            last_update + self.delta
+                self.delta = (instant_unscaled - last_update_unscaled).mul_f64(self.time_scale);
+                last_update + self.delta
+            }
         } else {
             instant_unscaled
         };
+        self.delta_seconds_f64 = self.delta.as_secs_f64();
+        self.delta_seconds = self.delta.as_secs_f32();
 
         self.duration_since_startup = instant - self.startup;
         self.seconds_since_startup = self.duration_since_startup.as_secs_f64();
